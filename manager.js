@@ -1,3 +1,4 @@
+"use strict";
 const { spawn } = require('child_process');
 const https = require('https')
 
@@ -8,6 +9,7 @@ const https = require('https')
 //   {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1130660146004111430/redacted?wait=true',method:'POST',headers:{'user-agent':'node/tekkit','Accept':'*/*','content-type':'application/json'}}
 // ];
 // var java = "/Library/Java/JavaVirtualMachines/jdk1.8.0_371.jdk/Contents/Home/bin/java"
+// var linkedChannel = '1130607884867207258'
 
 // Public
 var webhooks=[
@@ -16,6 +18,7 @@ var webhooks=[
   {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1130700778840010802/redacted?wait=true',method:'POST',headers:{'user-agent':'node/tekkit','Accept':'*/*','content-type':'application/json'}}
 ];
 var java = '/home/mint/Downloads/jre1.8.0_371/bin/java'
+var linkedChannel = '1130700639199035392'
 
 var whid = 2;
 var lastSender = "Server";
@@ -38,15 +41,24 @@ function send(postData,sender="Server") {
   req.end();
 }
 
+var avatarMap = {
+  'Server': '1130657993415983154/tekkit_cropped.png',
+  'IceSelkie': '1130652138800951457/163718745888522241_3bb5bfa826fa59167533f6380127d59e.webp',
+  /* redacted */
+}
+var usernameMap = {
+  '163718745888522241': 'IceSelkie',
+  /* redacted */
+}
 function getAvatar(sender) {
-  obj = {
-    'Server': '1130657993415983154/tekkit_cropped.png',
-    'IceSelkie': '1130652138800951457/163718745888522241_3bb5bfa826fa59167533f6380127d59e.webp',
-    /* redacted */
-  }
-  if (obj[sender])
-    return "https://cdn.discordapp.com/attachments/1001839393188876399/"+obj[sender];
+  if (avatarMap[sender])
+    return "https://cdn.discordapp.com/attachments/1001839393188876399/"+avatarMap[sender];
   return null;
+}
+function getUsername(user, nick) {
+  if (usernameMap[user.id])
+    return usernameMap[user.id];
+  return nick || user?.global_name || user?.username || "Unknown User";
 }
 
 function cleanup(string) {
@@ -58,7 +70,7 @@ function cleanup(string) {
 
 
 // java -Xmx3G -Xms2G -jar Tekkit.jar nogui 2>&1 | tee console.log
-let service = spawn("sh",['start.sh']);
+var service = spawn("sh",['start.sh']);
 
 let prevdat = "";
 let i=0;
@@ -130,7 +142,7 @@ var runData = (data) => {
 
       // Join Leave Nick messages
       if (!done) {
-        chat = RegExp(/\[Minecraft-Server\] (.*? joined the game|.*? left the game|[^\.:]*? lost connection.*|.*? is now known as .*)$/).exec(message)?.slice(1);
+        let chat = RegExp(/\[Minecraft-Server\] (.*? joined the game|.*? left the game|[^\.:]*? lost connection.*|.*? is now known as .*)$/).exec(message)?.slice(1);
         if (chat && !chat[0].includes("logged in with entity id")) {
           console.log(chat);
           send({content:chat[0]})
@@ -140,7 +152,7 @@ var runData = (data) => {
 
       // Start Stop messages
       if (!done) {
-        chat = RegExp(/\[Minecraft-Server\] (Stopping the server|Preparing level \"world\")$/).exec(message)?.slice(1);
+        let chat = RegExp(/\[Minecraft-Server\] (Stopping the server|Preparing level \"world\")$/).exec(message)?.slice(1);
         if (chat) {
           console.log(chat);
           send({content:chat[0]=="Stopping the server"?"Server stopped.":"Server started."})
@@ -150,7 +162,7 @@ var runData = (data) => {
 
       // Chat Messages
       if (!done) {
-        chat = RegExp(/\[Minecraft-Server\] <([^\<\>]+)> (.*)$/).exec(message)?.slice(1);
+        let chat = RegExp(/\[Minecraft-Server\] <([^\<\>]+)> (.*)$/).exec(message)?.slice(1);
         if (chat) {
           let user = chat[0];
           let msg = chat[1].trim() || ":warning: _unknown message_";
@@ -197,4 +209,199 @@ service.stderr.on('data', (data) => {
 service.on('close', (code) => {
   console.log(`Service exited with code ${code}`);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"use strict";
+const WebSocket = require("ws").WebSocket;
+
+var identity = {"intents":33280,"properties":{"$device":"bones","$browser":"node","$os":process.platform},
+"token":"redacted"};
+
+var ws = null;
+var connected = false;
+var sessionID = null;
+var lastSequence = 0;
+var printAllDisbatches = true;
+
+var heartbeatInterval = null;
+var heartbeatShouldBeRunning = false;
+var lastHeartbeat = null;
+
+var botUser = null;
+
+function start(sid=null, last=null) {
+  ws = new WebSocket('wss://gateway.discord.gg/?v=10&encoding=json');
+  ws.on('open', () => wsOnOpen(sid, last));
+  ws.on('close', (errcode, buffer) => wsOnClose(errcode, buffer));
+  ws.on('message', (message) => wsOnMessage(message));
+}
+function wsSend(webhookPacket) {
+  console.log("Sending:")
+  console.log(JSON.stringify(webhookPacket,null,2))
+  if (connected)
+    ws.send(JSON.stringify(webhookPacket,null));
+  else
+    console.log("Failed to send. Connection is dead.")
+}
+function wsOnOpen(sid, last) {
+  connected = true;
+  if (sid === null)
+    wsSend({"op":2,"d":identity});
+  else {
+    if (last !== null)
+      lastSequence = last;
+    wsSend({"op":6,"d":{"token":identity.token,"session_id":sid,"seq":lastSequence}});
+  }
+}
+function wsOnClose(errcode, buffer) {
+  connected = false;
+  console.log('disconnected:');
+  console.log(errcode);
+  console.log('"'+buffer.toString()+'"');
+  // Reconnect Requested:
+  if (errcode === 1001)
+    start(sessionID);
+  if (errcode === 1006) {
+    console.log("Unexpected client side disconnect... Reconnecting in 4 seconds...");
+    setTimeout(()=>start(sessionID), reconnectheartbeatInterval);
+  }
+}
+function heartbeat() {
+  if (!connected || !heartbeatShouldBeRunning) {
+    console.log("[hb] Heartbeat shouldnt be running. Stopping.");
+    heartbeatShouldBeRunning = false;
+    lastHeartbeat = 0;
+    return;
+  }
+  if (Date.now()>=lastHeartbeat+heartbeatInterval) {
+    console.log("[hb] Ba-Bum. Heartbeat sent for message "+lastSequence+".");
+    ws.send(JSON.stringify({"op":1,"d": lastSequence}));
+    lastHeartbeat = Date.now();
+  }
+  setTimeout(()=>heartbeat(),250);
+}
+function wsOnMessage(message) {
+  let message_time = Date.now();
+  message = JSON.parse(message);
+  message.time = message_time;
+  if (printAllDisbatches) console.log(JSON.stringify(message));
+  if (message.s) lastSequence = message.s;
+
+  // hb-ack
+  if (message.op==11 && message.s==null && message.d==null) {
+    console.log("Received message (none/heartbeat-ack) "+message_time);
+  } else
+  if (message.t==='RESUMED') {
+    console.log("Received message (none/RESUMED)");
+    console.log(message)
+  }
+
+  // Hello
+  if (message.op === 10) {
+    console.log("Received message (none/hello)");
+    console.log(message)
+
+    // Start heartbeat
+    heartbeatInterval = message.d.heartbeat_interval;
+    lastHeartbeat = (+new Date())-heartbeatInterval*Math.random();
+    if (heartbeatShouldBeRunning)
+      console.error("[hb] Already running!");
+    else {
+      heartbeatShouldBeRunning = true;
+      heartbeat();
+    }
+  } else
+  // Send Heartbeat ASAP
+  if (message.op === 1) {
+    console.log("[hb] Early heartbeat requested.");
+    lastHeartbeat = 0;
+  } else
+  // Resume Successful
+  if (message.op === 7) {
+    console.log("Successful reconnection!");
+  } else
+  // Resume Failed
+  if (message.op === 9) {
+    console.error("Reconnect failed. Please start a new session.");
+  } else
+
+  // Standard Dipatch
+  if (message.op === 0) {
+    if (message.t === "READY") {
+      sessionID = message.d.session_id;
+      botUser = message.d.user;
+      let name = botUser.global_name ? (botUser.global_name+" ("+botUser.username+")") : (botUser.username+"#"+botUser.discriminator);
+      console.log("Connection READY: Logged in as "+name+" <@"+botUser.id+"> "+(botUser.bot?"[bot]":"<<selfbot>>") + " -> "+sessionID)
+    }
+    console.log("Dispatch received: "+message.t+" id="+message.s)
+
+    // Process other disbatches received
+    if (message.t === "MESSAGE_CREATE" && !message.d.author.bot && message.d.channel_id == linkedChannel) {
+      let sender = getUsername(message.d.author,message.d.member?.nick);
+      let text = message.d.content;
+      text = text.split(/([@\n])/).filter(a=>a).map(a=>a=="@"?"@ ":a=="\n"?" ":a).join("");
+      console.log(`say <${sender}>: ${text}\n`);
+      service?.stdin.write(`say <${sender}>: ${text}\n`);
+    }
+  }
+}
+
+// Start the actual bot.
+start();
 
