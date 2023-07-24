@@ -319,7 +319,7 @@ function wsOnClose(errcode, buffer) {
     start(sessionID);
   if (errcode === 1006) {
     console.log("Unexpected client side disconnect... Reconnecting in 4 seconds...");
-    setTimeout(()=>start(sessionID), reconnectheartbeatInterval);
+    setTimeout(()=>start(sessionID), 4000);
   }
 }
 function heartbeat() {
