@@ -2,6 +2,11 @@
 const { spawn } = require('child_process');
 const https = require('https')
 
+// This version of bones/manager has been modifed for Mew Mew's Wheat Farmers' Association
+// Last Modified 2024-01-04
+
+var serverCommand=(str)=>service.stdin.write(`${str}\n`);
+
 // // Private
 // var webhooks=[
 //   {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1130608378993967104/redacted?wait=true',method:'POST',headers:{'user-agent':'node/tekkit','Accept':'*/*','content-type':'application/json'}},
@@ -13,12 +18,12 @@ const https = require('https')
 
 // Public
 var webhooks=[
-  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1130700725891113141/redacted?wait=true',method:'POST',headers:{'user-agent':'node/tekkit','Accept':'*/*','content-type':'application/json'}},
-  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1130700759676235816/redacted?wait=true',method:'POST',headers:{'user-agent':'node/tekkit','Accept':'*/*','content-type':'application/json'}},
-  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1130700778840010802/redacted?wait=true',method:'POST',headers:{'user-agent':'node/tekkit','Accept':'*/*','content-type':'application/json'}}
+  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1192587114127302796/redacted?wait=true',method:'POST',headers:{'user-agent':'node/bones','Accept':'*/*','content-type':'application/json'}},
+  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1192587124524978258/redacted?wait=true',method:'POST',headers:{'user-agent':'node/bones','Accept':'*/*','content-type':'application/json'}},
+  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1192587128987729981/redacted?wait=true',method:'POST',headers:{'user-agent':'node/bones','Accept':'*/*','content-type':'application/json'}},
 ];
-var java = '/home/mint/Downloads/jre1.8.0_371/bin/java'
-var linkedChannel = '1130700639199035392'
+var java = '/home/mint/Downloads/jdk-17.0.9/bin/java'
+var linkedChannel = '1192586689374343248'
 
 var whid = 2;
 var lastSender = "Server";
@@ -96,17 +101,20 @@ var runData = (data) => {
     try {
       // List Command:
       if (!done) {
-        let chatQty = RegExp(/There are ([0-9]+)\/[0-9]+ players online:$/).exec(message)?.slice(1);
-        let chatCmdList = RegExp(/\[Minecraft-Server\] <([^\<\>]+)> ~list$/).exec(message)?.slice(1);
+        let chatQty = RegExp(/There are ([0-9]+)(?:\/| of a max of )[0-9]+ players? online:(.*)$/).exec(message)?.slice(1);
+        if (chatQty?.[1]) listQty = chatQty[1].split(",").length
+        let chatCmdList = RegExp(/\[Server thread\/INFO\]: <([^\<\>]+)> ~list$/).exec(message)?.slice(1);
         if (chatCmdList) {
           service.stdin.write('list\n');
-          // console.error(["########"],'"list" Seen! Listing...')
+          console.error(["########"],'"~list" Seen! Listing...');
           listRequested = chatCmdList[0];
           listQty = null;
           done = true;
         }
-        else if (listQty && message.includes(" [INFO] [Minecraft-Server] ")) {
-          let msg = `${listQty} Player${listQty=="1"?"":"s"} Online: ${message.substring(46)}`;
+        else if ((listQty||chatQty?.[1]) && message.includes('[Server thread/INFO]: ')) {
+          console.error(["########"],'"~list" continuing...');
+          let online = chatQty[1] || ` ${message.substring(46)}`;
+          let msg = `${listQty} Player${listQty=="1"?"":"s"} Online:${online}`;
           service.stdin.write(`say ${msg}\n`);
           send({content:msg});
           listQty = null;
@@ -121,7 +129,7 @@ var runData = (data) => {
 
       // Stop command
       if (!done) {
-        if (message.endsWith(' [INFO] [Minecraft-Server] <IceSelkie> ~stop')) {
+        if (message.endsWith(' [Server thread/INFO]: <IceSelkie> ~stop')) {
           service.stdin.write('stop\n');
           console.error(["########"],'Closing server.')
           setTimeout(()=>exit(0),15000)
@@ -132,7 +140,7 @@ var runData = (data) => {
       // Join verification
       if (!done) {
         if (message.includes("logged in with")) {
-          let data = RegExp(/.*?r\] ([^ ]+).*/)[1];
+          let data = RegExp(/.*?\]: ([^ ]+)\[.*/)[1]; // modified for 1.20.4
 
           console.error(["########"],message);
           console.error(["########"],data);
@@ -142,7 +150,7 @@ var runData = (data) => {
 
       // Join Leave Nick messages
       if (!done) {
-        let chat = RegExp(/\[Minecraft-Server\] (.*? joined the game|.*? left the game|[^\.:]*? lost connection.*|.*? is now known as .*)$/).exec(message)?.slice(1);
+        let chat = RegExp(/\[Server thread\/INFO\]: (.*? joined the game|.*? left the game|[^\.:]*? lost connection.*|.*? is now known as .*)$/).exec(message)?.slice(1);
         if (chat && !chat[0].includes("logged in with entity id")) {
           console.log(chat);
           send({content:chat[0]})
@@ -152,9 +160,9 @@ var runData = (data) => {
 
       // Start Stop messages
       if (!done) {
-        let chat = RegExp(/\[Minecraft-Server\] (Stopping the server|Preparing level \"world\")$/).exec(message)?.slice(1);
+        let chat = RegExp(/\[Server thread\/INFO\]: (Stopping the server|Preparing level \"world\")$/).exec(message)?.slice(1);
         if (chat) {
-          console.log(chat);
+          console.log("#### start stop message ####",chat);
           send({content:chat[0]=="Stopping the server"?"Server stopped.":"Server started."})
           done = true;
         }
@@ -162,7 +170,7 @@ var runData = (data) => {
 
       // Chat Messages
       if (!done) {
-        let chat = RegExp(/\[Minecraft-Server\] <([^\<\>]+)> (.*)$/).exec(message)?.slice(1);
+        let chat = RegExp(/\[Server thread\/INFO\]: <([^\<\>]+)> (.*)$/).exec(message)?.slice(1);
         if (chat) {
           let user = chat[0];
           let msg = chat[1].trim() || ":warning: _unknown message_";

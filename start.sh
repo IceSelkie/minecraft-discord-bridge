@@ -10,7 +10,7 @@ for file in server.log console.log; do
   fi
 done
 
-/home/mint/Downloads/jre1.8.0_371/bin/java -Xmx3G -Xms2G -jar Tekkit.jar nogui 2>&1 | tee console.log
+/home/mint/Downloads/jdk-17.0.9/bin/java -Xmx3G -Xms2G -jar minecraft_1_20_4.jar nogui 2>&1 | tee console.log
 
 for file in server.log console.log; do
   base=$(basename $file .log)
