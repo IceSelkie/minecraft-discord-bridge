@@ -18,12 +18,12 @@ var serverCommand=(str)=>service.stdin.write(`${str}\n`);
 
 // Public
 var webhooks=[
-  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1192587114127302796/redacted?wait=true',method:'POST',headers:{'user-agent':'node/bones','Accept':'*/*','content-type':'application/json'}},
-  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1192587124524978258/redacted?wait=true',method:'POST',headers:{'user-agent':'node/bones','Accept':'*/*','content-type':'application/json'}},
-  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1192587128987729981/redacted?wait=true',method:'POST',headers:{'user-agent':'node/bones','Accept':'*/*','content-type':'application/json'}},
+  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1192750560449933342/redacted?wait=true',method:'POST',headers:{'user-agent':'node/bones','Accept':'*/*','content-type':'application/json'}},
+  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1192750620747251723/redacted?wait=true',method:'POST',headers:{'user-agent':'node/bones','Accept':'*/*','content-type':'application/json'}},
+  {hostname:'canary.discord.com',port:443,path:'/api/webhooks/1192750683028471849/redacted?wait=true',method:'POST',headers:{'user-agent':'node/bones','Accept':'*/*','content-type':'application/json'}},
 ];
 var java = '/home/mint/Downloads/jdk-17.0.9/bin/java'
-var linkedChannel = '1192586689374343248'
+var linkedChannel = '1192750533912571925'
 
 var whid = 2;
 var lastSender = "Server";
@@ -50,14 +50,23 @@ var avatarMap = {
   'Server': '1130657993415983154/tekkit_cropped.png',
   'IceSelkie': '1130652138800951457/163718745888522241_3bb5bfa826fa59167533f6380127d59e.webp',
   /* redacted */
+
+  /* redacted */
 }
 var usernameMap = {
   '163718745888522241': 'IceSelkie',
   /* redacted */
+
+  /* redacted */
 }
 function getAvatar(sender) {
-  if (avatarMap[sender])
-    return "https://cdn.discordapp.com/attachments/1001839393188876399/"+avatarMap[sender];
+  if (avatarMap[sender]) {
+    let avatar = avatarMap[sender];
+    if (avatar.includes("/"))
+      return "https://cdn.discordapp.com/attachments/1001839393188876399/"+avatar;
+    else
+      return "https://redacted/firecache/"+avatar;
+  }
   return null;
 }
 function getUsername(user, nick) {
