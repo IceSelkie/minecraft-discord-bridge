@@ -1,6 +1,7 @@
 "use strict";
 const { spawn } = require('child_process');
-const https = require('https')
+const https = require('https');
+const fs = require('fs');
 
 // This version of bones/manager has been modifed for Mew Mew's Wheat Farmers' Association
 // Last Modified 2024-01-04
@@ -24,6 +25,7 @@ var webhooks=[
 ];
 var java = '/home/mint/Downloads/jdk-17.0.9/bin/java'
 var linkedChannel = '1192750533912571925'
+const ADVANCEMENTS = (fs.readFileSync("advancements.txt")+"").split("\n");
 
 var whid = 2;
 var lastSender = "Server";
@@ -38,7 +40,8 @@ function send(postData,sender="Server") {
   if (avatar)
     postData.avatar_url = avatar;
 
-  postData.content = cleanup(postData.content);
+  if (postData.content)
+    postData.content = cleanup(postData.content);
 
   console.log(`Attempting to send (${whid}): ${JSON.stringify(postData)}`)
   var req = https.request(webhooks[whid],res=>console.log('statusCode:', res.statusCode));
@@ -151,8 +154,8 @@ var runData = (data) => {
         if (message.includes("logged in with")) {
           let data = RegExp(/.*?\]: ([^ ]+)\[.*/)[1]; // modified for 1.20.4
 
-          console.error(["########"],message);
-          console.error(["########"],data);
+          console.error([12344321],message);
+          console.error([12344321],data);
           done = true;
         }
       }
@@ -189,6 +192,19 @@ var runData = (data) => {
         }
       }
 
+      if (!done) {
+        let adv = RegExp(/\[Server thread\/INFO\]: ((.+) has made the advancement \[(.+)\])/).exec(message)?.slice(1);
+        if (adv) {
+          let [str, user, advname] = adv;
+          let msg = advancementToEmbed(advname);
+          if (msg)
+            send(msg,user);
+          else
+            send({content:str});
+          done = true;
+        }
+      }
+
       // // Dimension Loading messages
       // if (!done) {
       //   if (message.includes("Created Retrogen database for dimension")) {
@@ -212,6 +228,21 @@ var runData = (data) => {
   i++;
 }
 
+function advancementToEmbed(advname) {
+  try {
+    const parser = /<b>(.*?)<br><span.*? id="(.*?)"><td>(.*?)<\/td><code>([^<]+).*?"(.*?)">/;
+    let adv = ADVANCEMENTS.find(adv=>adv.includes(`>${advname}<`));
+    let [title,anchor,desc,code,icon] = parser.exec(adv).slice(1);
+    return {"embeds":[{
+        "description": `${desc}`,
+        "color": 14393877,
+        "author": {"name":`${title}`, "url":`https://minecraft.wiki/w/Advancement#${anchor}`, "icon_url":`https://minecraft.wiki${icon}`},
+        "footer": {"text":`${code}`}
+      }]};
+  } catch (ignored) {
+    return null;
+  }
+}
 
 
 // When your service writes to stdout
