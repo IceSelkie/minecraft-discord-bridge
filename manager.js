@@ -4,9 +4,10 @@ const https = require('https');
 const fs = require('fs');
 
 // This version of bones/manager has been modifed for Mew Mew's Wheat Farmers' Association
-// Last Modified 2024-01-04
+// Last Modified 2024-03-26
 
-var serverCommand=(str)=>service.stdin.write(`${str}\n`);
+const serverCommand=(str)=>service.stdin.write(`${str}\n`);
+var STATE = "PREP";
 
 // // Private
 // var webhooks=[
@@ -86,15 +87,49 @@ function cleanup(string) {
 }
 
 
-// java -Xmx3G -Xms2G -jar Tekkit.jar nogui 2>&1 | tee console.log
-var service = spawn("sh",['start.sh']);
+// This is the Minecraft process. Set in the function `startMinecraftServer`.
+var service = null;
+
 
 let prevdat = "";
 let i=0;
 
-
 let listQty = null;
 let listRequested = null;
+
+function startMinecraftServer() {
+  // java -Xmx3G -Xms2G -jar Tekkit.jar nogui 2>&1 | tee console.log
+  service = spawn("sh",['start.sh']);
+  STATE = "START";
+
+
+  // Listeners:
+  // When your service writes to stdout
+  service.stdout.on('data', runData);
+
+  // When your service writes to stderr (optional, but useful for debugging)
+  service.stderr.on('data', (data) => {
+    console.error(['Service STDERR:'], data);
+    let msg = "Server stderr detected: "+JSON.stringify(data);
+    send({content:msg.substring(0,1950)});
+  });
+
+  // When your service exits (optional, but useful for debugging)
+  service.on('close', (code) => {
+    console.log(`Service exited with code ${code}`);
+
+    if (STATE !== "STOPPING") {
+      send({content:"Server process detached. Assuming crashed, and restarting..."});
+      startMinecraftServer();
+    }
+  });
+
+  // Listen for the 'error' event, which indicates that there was an error starting the child process
+  service.on('error', (err) => {
+    console.error(`Failed to start bash script: ${err}`);
+    send({content:"Start script error: "+err});
+  });
+}
 
 var runData = (data) => {
   let messages = prevdat + data.toString();
@@ -142,9 +177,7 @@ var runData = (data) => {
       // Stop command
       if (!done) {
         if (message.endsWith(' [Server thread/INFO]: <IceSelkie> ~stop')) {
-          service.stdin.write('stop\n');
-          console.error(["########"],'Closing server.')
-          setTimeout(()=>exit(0),15000)
+          shutdown();
           done = true;
         }
       }
@@ -172,10 +205,10 @@ var runData = (data) => {
 
       // Start Stop messages
       if (!done) {
-        let chat = RegExp(/\[Server thread\/INFO\]: (Stopping the server|Preparing level \"world\")$/).exec(message)?.slice(1);
+        let chat = RegExp(/\[Server thread\/INFO\]: (Stopping the server|Stopping server|Preparing level \"world\")$/).exec(message)?.slice(1);
         if (chat) {
           console.log("#### start stop message ####",chat);
-          send({content:chat[0]=="Stopping the server"?"Server stopped.":"Server started."})
+          send({content:chat[0]=="Preparing level \"world\""?"Server started.":"Server stopped."});
           done = true;
         }
       }
@@ -244,24 +277,17 @@ function advancementToEmbed(advname) {
   }
 }
 
+function shutdown() {
+  STATE = "STOPPING";
+  console.error(["########"],'Closing server. Exiting in 15s.');
+  send({content:"Shutdown requested..."});
+  heartbeatShouldBeRunning = false;
+  ws.close(1000);
+  serverCommand("stop");
+  setTimeout(()=>exit(0),15000);
+}
 
-// When your service writes to stdout
-service.stdout.on('data', (a,b,c) => runData(a,b,c));
-
-// When your service writes to stderr (optional, but useful for debugging)
-service.stderr.on('data', (data) => {
-  console.error(['Service STDERR:'], data);
-});
-
-// When your service exits (optional, but useful for debugging)
-service.on('close', (code) => {
-  console.log(`Service exited with code ${code}`);
-});
-
-
-
-
-
+startMinecraftServer();
 
 
 
@@ -363,11 +389,23 @@ function wsOnClose(errcode, buffer) {
   console.log(errcode);
   console.log('"'+buffer.toString()+'"');
   // Reconnect Requested:
-  if (errcode === 1001)
+  if (errcode === 1001) {
     start(sessionID);
-  if (errcode === 1006) {
+  } else if (errcode === 1006) {
     console.log("Unexpected client side disconnect... Reconnecting in 4 seconds...");
     setTimeout(()=>start(sessionID), 4000);
+  } else {
+    // Reset bot and attempt reconnect.
+    setTimeout(()=>{
+      // If we want to stop, dont restart
+      if (!connected && STATE!=="STOPPING") {
+        ws = null; sessionID = null; lastSequence = 0; printAllDisbatches = true; botUser = null;
+        heartbeatInterval = null; heartbeatShouldBeRunning = false; lastHeartbeat = null;
+        start();
+      } else {
+        console.log("Aborting restart...");
+      }
+    }, 5000);
   }
 }
 function heartbeat() {
@@ -437,6 +475,32 @@ function wsOnMessage(message) {
       let name = botUser.global_name ? (botUser.global_name+" ("+botUser.username+")") : (botUser.username+"#"+botUser.discriminator);
       console.log("Connection READY: Logged in as "+name+" <@"+botUser.id+"> "+(botUser.bot?"[bot]":"<<selfbot>>") + " -> "+sessionID)
     }
+
+    if (message.t === "MESSAGE_CREATE") {
+      if (message.d.content === "~list") {
+        listRequested = message.d.author;
+        serverCommand('list');
+        listQty = null;
+      } else if (message.d.content === "~stop" && message.d.author.id === "163718745888522241") {
+        shutdown();
+      } else if (message.d.content.startsWith("~") && message.d.author.id === "163718745888522241") {
+        // pass command to minecraft server
+        serverCommand(message.d.content.substring(1));
+      }
+
+      // debug RCE
+      const botPing = `<@${botUser.id}> execute`;
+      if (false && message.d.author.id === "163718745888522241" && message.d.content.startsWith(botPing)) {
+        let msg = message.d.content.substring(botPing.length);
+        let output = undefined;
+        try {
+          output = eval(msg.substring(8));
+        } catch (e) {
+          output = e;
+        }
+        send({content:String(output)});
+      }
+    }
     console.log("Dispatch received: "+message.t+" id="+message.s)
 
     // Process other disbatches received
@@ -448,8 +512,28 @@ function wsOnMessage(message) {
       service?.stdin.write(`say <${sender}>: ${text}\n`);
     }
   }
-}
+};
+
+
+// Add timestamps to logs for debugging.
+const dateFromStr=(str) => new Date(str.replaceAll(/[^0-9]+/g,"").split(/(..?)/).filter((a,i)=>i%2).splice(0,9).join("X").replace("X","").replace("X","-").replace("X","-").replace("X","T").replace("X",":").replace("X",":").replace("X",".").replaceAll("X","")+"Z");
+const dateToStr=(date=new Date()) => new Date(date).toISOString().replaceAll(/[-:Z\.]+/g,"");
+const oldConsoleLog = console.log;
+const oldConsoleError = console.error;
+console.log = function(...args) {
+  // Add date
+  args=["["+dateToStr()+"]", ...args];
+  // Pass through to original console.log
+  oldConsoleLog(...args);
+};
+console.error = function(...args) {
+  // Add date
+  args=["["+dateToStr()+"]", ...args];
+  // Pass through to original console.error
+  oldConsoleError(...args);
+};
 
 // Start the actual bot.
+STATE = "RUNNING";
 start();
 
